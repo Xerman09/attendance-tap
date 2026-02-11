@@ -5,7 +5,7 @@
         class="rounded-2xl p-6 border border-black/5 dark:border-white/10 bg-white/70 dark:bg-neutral-900/70 backdrop-blur shadow-sm"
     >
       <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
-        <h2 class="text-lg font-semibold">Admin Logs</h2>
+        <!-- <h2 class="text-lg font-semibold">Admin Logs</h2> -->
         <div class="flex flex-wrap items-center gap-3">
           <label class="flex items-center gap-2 text-sm opacity-80">
             <input type="checkbox" v-model="autoRefresh" />

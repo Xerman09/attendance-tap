@@ -4,7 +4,7 @@
       <div class="font-semibold flex-1 min-w-0 text-[#1e88e5]">VERTEX</div>
       <nav class="flex items-center gap-4 text-sm flex-wrap w-full sm:w-auto">
         <RouterLink class="hover:underline" to="/">Scanner</RouterLink>
-        <RouterLink class="hover:underline" to="/admin/logs">Admin Logs</RouterLink>
+        <!-- <RouterLink class="hover:underline" to="/admin/logs">Admin Logs</RouterLink> -->
       </nav>
       <div class="hidden sm:block sm:ml-auto text-sm opacity-70"><Clock/></div>
     </div>
