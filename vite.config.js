@@ -18,6 +18,8 @@ export default defineConfig({
   server: {
     host: true,
     port: 5555,
+    // Allows traffic from both the full Tailscale domain and the short 'vtc' hostname
+    allowedHosts: ['vtc.tail054015.ts.net', 'vtc'], 
     proxy: {
       // Directus REST
       '/items': makeProxy(),
@@ -29,6 +31,8 @@ export default defineConfig({
   preview: {
     host: true,
     port: 5000,
+    // Allows traffic from both hostnames for preview builds
+    allowedHosts: ['vtc.tail054015.ts.net', 'vtc'],
     proxy: {
       '/items': makeProxy(),
       '/api': makeProxy(),
