@@ -789,8 +789,6 @@ export async function getDepartments(params = {}) {
     const qs = new URLSearchParams(params || {}).toString();
     const candidates = [
         qs ? `/items/department?${qs}` : '/items/department',
-        qs ? `/api/department?${qs}` : '/api/department',
-        qs ? `/api/departments?${qs}` : '/api/departments',
     ];
     let lastErr;
     for (const url of candidates) {
@@ -1251,10 +1249,6 @@ export async function getScheduleByDepartment(departmentId) {
     const did = encodeURIComponent(departmentId);
     const candidates = [
         `/items/department_schedule?filter[department_id][_eq]=${did}&limit=1`,
-        `/api/schedules?departmentId=${did}`,
-        `/api/department-schedules?departmentId=${did}`,
-        `/api/schedule?departmentId=${did}`,
-        `/api/departments/${did}/schedule`,
     ];
     let lastErr;
     for (const url of candidates) {
@@ -1316,9 +1310,6 @@ export async function createSchedule(data) {
     );
     const candidates = [
         '/items/department_schedule',
-        '/api/schedules',
-        '/api/department-schedules',
-        '/api/schedule',
     ];
     let lastErr;
     for (const url of candidates) {
@@ -1347,9 +1338,6 @@ export async function updateSchedule(id, data) {
     );
     const candidates = [
         `/items/department_schedule/${sid}`,
-        `/api/schedules/${sid}`,
-        `/api/department-schedules/${sid}`,
-        `/api/schedule/${sid}`,
     ];
     let lastErr;
     for (const url of candidates) {
@@ -1377,9 +1365,6 @@ export async function deleteSchedule(id) {
     const sid = encodeURIComponent(id);
     const candidates = [
         `/items/department_schedule/${sid}`,
-        `/api/schedules/${sid}`,
-        `/api/department-schedules/${sid}`,
-        `/api/schedule/${sid}`,
     ];
     let lastErr;
     for (const url of candidates) {
@@ -1402,10 +1387,6 @@ export async function deleteSchedule(id) {
 export async function getDepartmentSchedules() {
     const candidates = [
         '/items/department_schedule',
-        '/api/departments/schedules',
-        '/api/schedules',
-        '/api/department-schedules',
-        '/api/schedule',
     ];
     let lastErr;
     for (const url of candidates) {

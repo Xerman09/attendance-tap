@@ -23,9 +23,6 @@ export default defineConfig({
     proxy: {
       // Directus REST
       '/items': makeProxy(),
-      // Custom/compat REST endpoints used by api.js fallbacks
-      '/api': makeProxy(),
-      '/attendance': makeProxy(),
     }
   },
   preview: {
@@ -35,8 +32,6 @@ export default defineConfig({
     allowedHosts: ['vtc.tail054015.ts.net', 'vtc'],
     proxy: {
       '/items': makeProxy(),
-      '/api': makeProxy(),
-      '/attendance': makeProxy(),
     }
   },
   build: {
