@@ -207,8 +207,8 @@ async function http(path, options = {}) {
                 headers['Authorization'] = `Bearer ${import.meta.env.VITE_DIRECTUS_TOKEN}`;
             }
             const res = await fetch(url, {
-                headers: { ...headers, ...(options.headers || {}) },
                 ...options,
+                headers: { ...headers, ...(options.headers || {}) },
             });
             if (!res) throw new Error('No response');
             const ct = res.headers.get('content-type') || '';
