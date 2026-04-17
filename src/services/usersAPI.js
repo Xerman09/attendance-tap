@@ -3,9 +3,13 @@ const BASE = '/items/user'
 
 // Generic fetch helper
 async function j(method, url, body) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (import.meta.env.VITE_DIRECTUS_TOKEN) {
+        headers['Authorization'] = `Bearer ${import.meta.env.VITE_DIRECTUS_TOKEN}`;
+    }
     const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
     })
     if (!res.ok) {

@@ -202,8 +202,12 @@ async function http(path, options = {}) {
     let lastErr;
     for (const url of attempts) {
         try {
+            const headers = { 'Content-Type': 'application/json' };
+            if (import.meta.env.VITE_DIRECTUS_TOKEN) {
+                headers['Authorization'] = `Bearer ${import.meta.env.VITE_DIRECTUS_TOKEN}`;
+            }
             const res = await fetch(url, {
-                headers: { 'Content-Type': 'application/json' },
+                headers: { ...headers, ...(options.headers || {}) },
                 ...options,
             });
             if (!res) throw new Error('No response');
