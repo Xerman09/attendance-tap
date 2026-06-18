@@ -834,12 +834,22 @@ const ACTION_SEQUENCE = [
 ];
 
 async function getTodayLogForUser(userId) {
-  const dateStr = manilaDateYMD();
+  const todayStr = manilaDateYMD();
+  
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const yesterdayStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Manila',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+
   try {
     const res = await getLogs({
       userId,
-      from: dateStr,
-      to: dateStr,
+      from: yesterdayStr,
+      to: todayStr,
       useUserDateEndpoint: true,
     });
     const arrRaw = Array.isArray(res)
@@ -849,13 +859,7 @@ async function getTodayLogForUser(userId) {
       const uid = Number(
           r?.userId ?? r?.user_id ?? r?.user?.id
       );
-      const ld = String(
-          r?.logDate || r?.log_date || ''
-      ).slice(0, 10);
-      return (
-          uid === Number(userId) &&
-          (!ld || ld === dateStr)
-      );
+      return uid === Number(userId);
     });
     if (!arr?.length) return null;
     if (arr.length === 1) return arr[0];
@@ -886,8 +890,8 @@ async function getTodayLogForUser(userId) {
     try {
       const res2 = await getLogs({
         userId,
-        from: dateStr,
-        to: dateStr,
+        from: yesterdayStr,
+        to: todayStr,
       });
       const arr2Raw = Array.isArray(res2)
           ? res2
@@ -896,13 +900,7 @@ async function getTodayLogForUser(userId) {
         const uid = Number(
             r?.userId ?? r?.user_id ?? r?.user?.id
         );
-        const ld = String(
-            r?.logDate || r?.log_date || ''
-        ).slice(0, 10);
-        return (
-            uid === Number(userId) &&
-            (!ld || ld === dateStr)
-        );
+        return uid === Number(userId);
       });
       if (!arr2?.length) return null;
       if (arr2.length === 1) return arr2[0];
@@ -944,7 +942,7 @@ function countRecordedActions(row) {
 }
 async function determineNextAction(userId) {
   const todayStr = manilaDateYMD();
-  const todayLog = await getTodayLogForUser(userId);
+  const mostRecentLog = await getTodayLogForUser(userId);
 
   // ---- Try to load the user's schedule ----
   let schedule = null;
@@ -957,48 +955,84 @@ async function determineNextAction(userId) {
     schedule = null;
   }
 
-  // ---- Check if we are already past scheduled work_end (Asia/Manila) ----
-  let afterWorkEnd = false;
-  if (schedule?.workEnd) {
-    // schedule.workEnd is something like "17:30:00"
-    const hhmmss = String(schedule.workEnd).slice(0, 8); // keep "HH:MM:SS"
-    const schedStr = `${todayStr}T${hhmmss}+08:00`;       // Manila absolute time
-    const schedTs = Date.parse(schedStr);                // ms since epoch
-    if (!Number.isNaN(schedTs)) {
-      const nowTs = Date.now();
-      if (nowTs >= schedTs) afterWorkEnd = true;
-    }
+  if (!mostRecentLog) {
+    return { action: 'TIME_IN', logDate: todayStr };
   }
 
-  if (afterWorkEnd && todayLog) {
-    const hasTimeIn = !!(
-        todayLog.timeIn ||
-        todayLog.time_in ||
-        todayLog.checkIn ||
-        todayLog.in
-    );
-    const hasTimeOut = !!(
-        todayLog.timeOut ||
-        todayLog.time_out ||
-        todayLog.checkOut ||
-        todayLog.out
-    );
+  const hasTimeIn = !!(
+      mostRecentLog.timeIn ||
+      mostRecentLog.time_in ||
+      mostRecentLog.checkIn ||
+      mostRecentLog.in
+  );
+  const hasTimeOut = !!(
+      mostRecentLog.timeOut ||
+      mostRecentLog.time_out ||
+      mostRecentLog.checkOut ||
+      mostRecentLog.out
+  );
 
-    // If user has already TIMED IN but has no TIME_OUT yet and
-    // current time is after work_end -> force TIME_OUT.
-    if (hasTimeIn && !hasTimeOut) {
-      return 'TIME_OUT';
-    }
+  const logDateRaw = mostRecentLog.logDate || mostRecentLog.log_date;
+  const logDateStr = logDateRaw ? String(logDateRaw).slice(0, 10) : todayStr;
+  const nowTs = Date.now();
+  const lastTs = latestActionTime(mostRecentLog) || nowTs;
 
-    // If TIME_OUT is already recorded, no more actions for today.
-    if (hasTimeOut) {
+  // If already TIMED OUT
+  if (hasTimeOut) {
+    if (logDateStr === todayStr) {
       return null;
+    } else {
+      return { action: 'TIME_IN', logDate: todayStr };
     }
   }
 
-  // ---- Normal behavior (before work_end) ----
-  const count = countRecordedActions(todayLog);
-  return ACTION_SEQUENCE[count] || null;
+  // If TIMED IN but NOT TIMED OUT
+  if (hasTimeIn && !hasTimeOut) {
+    const hoursSince = (nowTs - lastTs) / (1000 * 60 * 60);
+
+    // Auto-time in check: if it's been more than 20 hours since the last scan
+    if (hoursSince > 20) {
+      return { action: 'TIME_IN', logDate: todayStr };
+    }
+
+    let afterWorkEnd = false;
+    if (schedule?.workEnd) {
+      const hhmmss = String(schedule.workEnd).slice(0, 8); // "HH:MM:SS"
+      const startStr = schedule.workStart ? String(schedule.workStart).slice(0, 8) : "00:00:00";
+      const isNightShift = startStr > hhmmss; // e.g., 20:00:00 > 05:00:00
+
+      let schedDateStr = logDateStr;
+      
+      if (isNightShift) {
+        const d = new Date(Date.parse(`${logDateStr}T00:00:00+08:00`));
+        d.setDate(d.getDate() + 1);
+        schedDateStr = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'Asia/Manila',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(d);
+      }
+
+      const schedStr = `${schedDateStr}T${hhmmss}+08:00`;
+      const schedTs = Date.parse(schedStr);
+      if (!Number.isNaN(schedTs)) {
+        if (nowTs >= schedTs) afterWorkEnd = true;
+      }
+    }
+
+    if (afterWorkEnd) {
+      return { action: 'TIME_OUT', logDate: logDateStr };
+    }
+
+    const count = countRecordedActions(mostRecentLog);
+    const act = ACTION_SEQUENCE[count] || null;
+    return act ? { action: act, logDate: logDateStr } : null;
+  }
+
+  const count = countRecordedActions(mostRecentLog);
+  const act = ACTION_SEQUENCE[count] || null;
+  return act ? { action: act, logDate: logDateStr } : null;
 }
 
 
@@ -1242,6 +1276,7 @@ function buildPayload({
                         type,
                         action,
                         raw,
+                        logDate,
                       }) {
   const iso = manilaIsoWithOffset();
   const actionEnum = String(action || 'TIME_IN')
@@ -1262,7 +1297,7 @@ function buildPayload({
     userId,
     departmentId: departmentId || undefined,
     departmentName: departmentName || undefined,
-    logDate: iso.slice(0, 10),
+    logDate: logDate || iso.slice(0, 10),
     ...timed,
     type,
     action: actionEnum,
@@ -1284,8 +1319,8 @@ async function simulateFingerprint() {
     return;
   }
 
-  const nextAction = await determineNextAction(targetUserId);
-  if (!nextAction) {
+  const nextActionData = await determineNextAction(targetUserId);
+  if (!nextActionData) {
     note(
         false,
         'All required scans for today are already recorded. Please do not scan again.'
@@ -1294,7 +1329,10 @@ async function simulateFingerprint() {
     return;
   }
 
-  const key = `${targetUserId}|${nextAction}|${manilaDateYMD()}`;
+  const nextAction = typeof nextActionData === 'string' ? nextActionData : nextActionData.action;
+  const targetLogDate = typeof nextActionData === 'object' && nextActionData.logDate ? nextActionData.logDate : manilaDateYMD();
+
+  const key = `${targetUserId}|${nextAction}|${targetLogDate}`;
   const nowTs = Date.now();
   if (lastSubmit.key === key && nowTs - lastSubmit.ts < 1500) {
     note(false, 'Already recorded. Please do not scan twice.');
@@ -1358,6 +1396,7 @@ async function simulateFingerprint() {
       type: 'FINGERPRINT',
       action: nextAction,
       raw: 'SIMULATED_FP_4500',
+      logDate: targetLogDate,
     });
 
     console.debug(
@@ -1445,8 +1484,8 @@ async function commit({
     await enforceLocalCooldownOrThrow(userId);
     await enforceServerCooldownOrThrow(userId);
 
-    const nextAction = await determineNextAction(userId);
-    if (!nextAction) {
+    const nextActionData = await determineNextAction(userId);
+    if (!nextActionData) {
       note(
           false,
           'All required scans for today are already recorded. Please do not scan again.'
@@ -1454,7 +1493,10 @@ async function commit({
       return;
     }
 
-    const key = `${userId}|${nextAction}|${manilaDateYMD()}`;
+    const nextAction = typeof nextActionData === 'string' ? nextActionData : nextActionData.action;
+    const targetLogDate = typeof nextActionData === 'object' && nextActionData.logDate ? nextActionData.logDate : manilaDateYMD();
+
+    const key = `${userId}|${nextAction}|${targetLogDate}`;
     const nowTs = Date.now();
     if (lastSubmit.key === key && nowTs - lastSubmit.ts < 1500) {
       note(false, 'Already recorded. Please do not scan twice.');
@@ -1485,6 +1527,7 @@ async function commit({
       type,
       action: nextAction,
       raw,
+      logDate: targetLogDate,
     });
 
     console.debug('[Scanner] commit payload ->', payload);
