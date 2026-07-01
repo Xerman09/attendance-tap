@@ -498,7 +498,7 @@ export async function getLogs(params = {}) {
         else
             q.append(
                 'filter[log_date][_between]',
-                JSON.stringify([fromStr, toStr])
+                `${fromStr},${toStr}`
             );
     } else if (fromStr) {
         q.append('filter[log_date][_eq]', fromStr);
