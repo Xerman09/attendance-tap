@@ -1017,7 +1017,8 @@ async function determineNextAction(userId) {
       const schedStr = `${schedDateStr}T${hhmmss}+08:00`;
       const schedTs = Date.parse(schedStr);
       if (!Number.isNaN(schedTs)) {
-        if (nowTs >= schedTs) afterWorkEnd = true;
+        // 2-hour grace period: if they scan within 2 hours of their end time, or any time after, it's a TIME_OUT
+        if (nowTs >= schedTs - (2 * 60 * 60 * 1000)) afterWorkEnd = true;
       }
     }
 
