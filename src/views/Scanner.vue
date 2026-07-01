@@ -990,8 +990,8 @@ async function determineNextAction(userId) {
   if (hasTimeIn && !hasTimeOut) {
     const hoursSince = (nowTs - lastTs) / (1000 * 60 * 60);
 
-    // Auto-time in check: if it's been more than 20 hours since the last scan
-    if (hoursSince > 20) {
+    // Auto-time in check: if it's been more than 22 hours since the last scan
+    if (hoursSince > 22) {
       return { action: 'TIME_IN', logDate: todayStr };
     }
 
