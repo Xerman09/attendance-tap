@@ -1411,17 +1411,7 @@ export async function getDepartmentSchedules() {
     throw lastErr || new Error('Failed to load department schedules');
 }
 
-export async function getScheduleByDepartment(departmentId) {
-    if (departmentId == null) return null;
-    try {
-        const schedules = await getDepartmentSchedules();
-        return schedules.find(s => 
-            String(s.departmentId ?? s.department_id ?? s.id) === String(departmentId)
-        ) || null;
-    } catch (_) {
-        return null;
-    }
-}
+
 
 // ----------------- POST Attendance (HARDENED + auto TIME_OUT) -----------------
 export async function postLog(payload) {
