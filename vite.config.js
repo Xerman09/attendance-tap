@@ -3,7 +3,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 // Backend API target – Directus (or your service) on LAN
-const target = 'http://goatedcodoer:8091/'
+const target = 'http://goatedcodoer:8090/'
 
 const makeProxy = () => ({
   target,
