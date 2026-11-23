@@ -541,12 +541,19 @@ const initials = computed(() => {
 watch(
     () => form.value.manualUserId,
     async (id) => {
-      selectedUser.value = null;
       if (id == null || id === '') {
+        selectedUser.value = null;
         fullName.value = '';
         form.value.departmentId = undefined;
         return;
       }
+      // Skip redundant fetch if onRfidSubmit already loaded this exact user
+      const cur = selectedUser.value;
+      const curId = cur ? Number(cur.userId ?? cur.id ?? cur.user_id) : null;
+      if (cur && curId === Number(id)) {
+        return;
+      }
+      selectedUser.value = null;
       try {
         const user = await getUserById(id);
         if (user) {
@@ -633,6 +640,7 @@ async function onRfidSubmit() {
         await commit({
           departmentId: form.value.departmentId,
           manualUserId: form.value.manualUserId,
+          resolvedUser: u,
         });
       } finally {
         form.value.rfide = '';
@@ -796,19 +804,8 @@ function scheduleClearFields(ms) {
 }
 
 /** ---------------- Data loaders ---------------- */
-async function loadAdminLogs() {
-  try {
-    const data = await getLogs({});
-    adminRows.value = Array.isArray(data)
-        ? data
-        : data?.content || [];
-    console.log('[AdminLogs] rows:', adminRows.value.length);
-  } catch (e) {
-    console.error('[AdminLogs] load error:', e);
-    adminRows.value = [];
-  }
-}
-loadAdminLogs();
+// Admin logs are not displayed in Scanner.vue; keep stub to avoid fetching the entire log table on every tap
+async function loadAdminLogs() {}
 
 /** ---------------- Department schedules ---------------- */
 const schedules = ref([]);
@@ -1068,23 +1065,33 @@ function countRecordedActions(row) {
   ];
   return fields.reduce((n, f) => n + (row[f] ? 1 : 0), 0);
 }
-async function determineNextAction(userId) {
+async function determineNextAction(userId, opts = {}) {
   const todayStr = manilaDateYMD();
-  const mostRecentLog = await getTodayLogForUser(userId);
-
-  // ---- Try to load the user's schedule ----
-  let schedule = null;
-  try {
-    const deptInfo = await resolveDepartmentForUser(userId);
-    if (deptInfo?.departmentId != null) {
-      schedule = await getScheduleByDepartment(deptInfo.departmentId);
-    }
-  } catch (_) {
-    schedule = null;
-  }
+  const mostRecentLog =
+      'prefetchedLog' in opts
+          ? opts.prefetchedLog
+          : await getTodayLogForUser(userId);
 
   if (!mostRecentLog) {
     return { action: 'TIME_IN', logDate: todayStr };
+  }
+
+  // ---- Try to resolve the user's schedule from already-loaded schedules first ----
+  let schedule = null;
+  try {
+    let deptId = opts.departmentId ?? form.value.departmentId ?? null;
+    if (deptId == null) {
+      const deptInfo = await resolveDepartmentForUser(userId);
+      deptId = deptInfo?.departmentId ?? null;
+    }
+    if (deptId != null) {
+      const cached = (schedules.value || []).find(
+          (s) => Number(s?.departmentId) === Number(deptId)
+      );
+      schedule = cached || (await getScheduleByDepartment(deptId));
+    }
+  } catch (_) {
+    schedule = null;
   }
 
   const hasTimeIn = !!(
@@ -1583,8 +1590,8 @@ async function simulateFingerprint() {
       );
     note(false, msg);
   } finally {
-    scheduleClearFields(success ? 0 : 2000);
     busy.value = false;
+    scheduleClearFields(success ? 0 : 2000);
   }
 }
 
@@ -1598,6 +1605,7 @@ async function commit({
                         departmentId,
                         manualUserId,
                         keyboard,
+                        resolvedUser,
                       }) {
   if (busy.value) return;
   busy.value = true;
@@ -1606,17 +1614,61 @@ async function commit({
   let success = false;
 
   try {
-    const { userId, type, raw } = await resolveUser({
-      manualUserId,
-      keyboard,
-    });
+    const { userId, type, raw } = resolvedUser
+        ? {
+            userId: Number(resolvedUser.userId ?? resolvedUser.id ?? manualUserId),
+            type: 'RFID',
+            raw: '',
+          }
+        : await resolveUser({
+            manualUserId,
+            keyboard,
+          });
     intendedUserId = userId;
 
-    await resetCooldownIfNoLogs(userId);
-    await enforceLocalCooldownOrThrow(userId);
-    await enforceServerCooldownOrThrow(userId);
+    // Fetch recent log ONCE and reuse it for cooldown checks & next-action determination
+    const recentLog = await getTodayLogForUser(userId);
+    if (!recentLog) {
+      clearCooldownFor(userId);
+    } else if (!COOLDOWN_DISABLED) {
+      if (getCooldownLeftSec(userId) > 0) {
+        const err = new Error('You can only scan once.');
+        err.code = 'COOLDOWN_LOCAL';
+        throw err;
+      }
+      const lastTs = latestActionTime(recentLog);
+      if (lastTs && (Date.now() - lastTs) / 60000 < COOLDOWN_MINUTES) {
+        const err = new Error('You can only scan once.');
+        err.code = 'COOLDOWN_SERVER';
+        throw err;
+      }
+    }
 
-    const nextActionData = await determineNextAction(userId);
+    let resolvedDeptId =
+        departmentId ??
+        resolvedUser?.departmentId ??
+        resolvedUser?.department_id ??
+        resolvedUser?.user_department ??
+        null;
+    let resolvedDeptName =
+        resolvedUser?.departmentName ??
+        resolvedUser?.department_name ??
+        undefined;
+
+    if (resolvedDeptId == null) {
+      try {
+        const info = await resolveDepartmentForUser(userId);
+        if (info) {
+          resolvedDeptId = info.departmentId;
+          resolvedDeptName = resolvedDeptName || info.departmentName;
+        }
+      } catch {}
+    }
+
+    const nextActionData = await determineNextAction(userId, {
+      prefetchedLog: recentLog,
+      departmentId: resolvedDeptId,
+    });
     if (!nextActionData) {
       note(
           false,
@@ -1635,18 +1687,6 @@ async function commit({
       return;
     }
     lastSubmit = { key, ts: nowTs };
-
-    let resolvedDeptId = departmentId;
-    let resolvedDeptName;
-
-    try {
-      const info = await resolveDepartmentForUser(userId);
-      if (info) {
-        resolvedDeptId =
-            resolvedDeptId ?? info.departmentId;
-        resolvedDeptName = info.departmentName;
-      }
-    } catch {}
 
     form.value.manualUserId = userId;
     if (resolvedDeptId != null)
@@ -1714,8 +1754,8 @@ async function commit({
       );
     note(false, msg);
   } finally {
-    scheduleClearFields(success ? 0 : 2000);
     busy.value = false;
+    scheduleClearFields(success ? 0 : 2000);
   }
 }
 </script>

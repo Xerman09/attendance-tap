@@ -899,62 +899,11 @@ export async function getUserById(id, opts = {}) {
         return null;
     };
 
-    try {
-        const res = await http(
-            `/items/user?userId=${encodeURIComponent(id)}`
-        );
-        const match = pickMatch(res);
-        if (match) return match;
-    } catch (e) {
-        console.warn(
-            '[API] /items/user?userId= not available or no match:',
-            e.message
-        );
-    }
-
-    try {
-        const res = await http(`/items/user?id=${encodeURIComponent(id)}`);
-        const match = pickMatch(res);
-        if (match) return match;
-    } catch (e) {
-        console.warn(
-            '[API] /items/user?id= not available or no match:',
-            e.message
-        );
-    }
-
-    try {
-        const res = await http('/items/user');
-        const match = pickMatch(res);
-        if (match) return match;
-    } catch (e) {
-        console.warn(
-            '[API] /items/user full list fetch failed:',
-            e.message
-        );
-    }
-
-    try {
-        const res = await http(`/items/user/${encodeURIComponent(id)}`);
-        const match = pickMatch(res);
-        if (match) return match;
-    } catch (e) {
-        console.warn(
-            '[API] /items/user/:id failed:',
-            e.message
-        );
-    }
-
+    // Try fast single-record Directus endpoints FIRST to avoid fetching full user lists
     const directusAttempts = [
         `/items/user/${encodeURIComponent(id)}`,
-        `/items/user?filter[user_id][_eq]=${encodeURIComponent(
-            id
-        )}&limit=1`,
-        `/items/user?filter[id][_eq]=${encodeURIComponent(
-            id
-        )}&limit=1`,
-        `/items/user?user_id=${encodeURIComponent(id)}`,
-        `/items/user?id=${encodeURIComponent(id)}`,
+        `/items/user?filter[user_id][_eq]=${encodeURIComponent(id)}&limit=1`,
+        `/items/user?filter[id][_eq]=${encodeURIComponent(id)}&limit=1`,
     ];
     for (const path of directusAttempts) {
         try {
@@ -962,6 +911,22 @@ export async function getUserById(id, opts = {}) {
             const match = pickMatch(res);
             if (match) return match;
         } catch (_) {}
+    }
+
+    // Legacy fallbacks only if Directus direct lookups didn't match
+    const legacyAttempts = [
+        `/items/user?userId=${encodeURIComponent(id)}`,
+        `/items/user?id=${encodeURIComponent(id)}`,
+        '/items/user',
+    ];
+    for (const path of legacyAttempts) {
+        try {
+            const res = await http(path);
+            const match = pickMatch(res);
+            if (match) return match;
+        } catch (e) {
+            console.warn(`[API] ${path} fallback failed:`, e.message);
+        }
     }
 
     if (!noMock) {

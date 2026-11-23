@@ -465,6 +465,7 @@ function startConfetti() {
 
 /** ---------------- Lifecycle & Watchers ---------------- */
 function unlockAudio() {
+  if (audioCtx && audioCtx.state === 'running') return;
   try {
     const ctx = getAudioContext();
     if (ctx && ctx.state === 'suspended') {
