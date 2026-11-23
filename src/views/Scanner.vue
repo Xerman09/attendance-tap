@@ -394,6 +394,7 @@ import {
   getExistingAttendanceLog,
   updateLog,
   getScheduleByDepartment, // ✅ ADD THIS
+  isUserActive,
 } from '../services/api.js';
 
 import {
@@ -611,15 +612,6 @@ async function onRfidSubmit() {
   try {
     const u = await findUserByRfidOrBarcode(v);
     if (u && (u.userId != null || u.id != null)) {
-      form.value.manualUserId = Number(u.userId ?? u.id);
-      const directId =
-          u.departmentId ??
-          u.department_id ??
-          u?.department?.departmentId ??
-          u?.department?.id;
-      if (directId != null)
-        form.value.departmentId = Number(directId);
-      selectedUser.value = u;
       const name =
           u.fullName ||
           u.name ||
@@ -634,6 +626,26 @@ async function onRfidSubmit() {
               .filter(Boolean)
               .join(' ')
               .trim();
+
+      if (!isUserActive(u)) {
+        form.value.rfide = '';
+        note(
+            false,
+            `${name || `Employee #${u.userId ?? u.id}`} is currently inactive and cannot tap.`
+        );
+        scheduleClearFields(2000);
+        return;
+      }
+
+      form.value.manualUserId = Number(u.userId ?? u.id);
+      const directId =
+          u.departmentId ??
+          u.department_id ??
+          u?.department?.departmentId ??
+          u?.department?.id;
+      if (directId != null)
+        form.value.departmentId = Number(directId);
+      selectedUser.value = u;
       if (name) fullName.value = name;
 
       try {
@@ -1495,6 +1507,18 @@ async function simulateFingerprint() {
     try {
       const u = await getUserById(targetUserId);
       if (u) {
+        if (!isUserActive(u)) {
+          const inactiveName =
+              u.fullName ||
+              u.name ||
+              [u.user_fname, u.user_mname, u.user_lname]
+                  .filter(Boolean)
+                  .join(' ')
+                  .trim() ||
+              `Employee #${targetUserId}`;
+          note(false, `${inactiveName} is currently inactive and cannot tap.`);
+          return;
+        }
         selectedUser.value = u;
         const name =
             u.fullName ||
@@ -1625,6 +1649,26 @@ async function commit({
             keyboard,
           });
     intendedUserId = userId;
+
+    // Ensure employee is active before allowing any attendance log
+    const activeCheckUser =
+        resolvedUser || selectedUser.value || (await getUserById(userId));
+    if (activeCheckUser && !isUserActive(activeCheckUser)) {
+      const inactiveName =
+          activeCheckUser.fullName ||
+          activeCheckUser.name ||
+          [
+            activeCheckUser.user_fname,
+            activeCheckUser.user_mname,
+            activeCheckUser.user_lname,
+          ]
+              .filter(Boolean)
+              .join(' ')
+              .trim() ||
+          `Employee #${userId}`;
+      note(false, `${inactiveName} is currently inactive and cannot tap.`);
+      return;
+    }
 
     // Fetch recent log ONCE and reuse it for cooldown checks & next-action determination
     const recentLog = await getTodayLogForUser(userId);

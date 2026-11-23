@@ -807,6 +807,52 @@ export function isRecordDeleted(record) {
     return false;
 }
 
+export function isUserActive(user) {
+    if (!user || typeof user !== 'object') return false;
+    if (isRecordDeleted(user)) return false;
+
+    const activeKeys = ['is_active', 'isActive', 'user_active', 'userActive', 'active'];
+    for (const k of activeKeys) {
+        if (Object.prototype.hasOwnProperty.call(user, k) && user[k] != null) {
+            const v = user[k];
+            if (typeof v === 'boolean') return v;
+            if (typeof v === 'number') return v !== 0;
+            const s = String(v).trim().toLowerCase();
+            if (s === '0' || s === 'false' || s === 'no' || s === 'inactive' || s === 'disabled') {
+                return false;
+            }
+            if (s === '1' || s === 'true' || s === 'yes' || s === 'active') {
+                return true;
+            }
+        }
+    }
+
+    const statusKeys = ['user_status', 'userStatus', 'employment_status', 'employmentStatus', 'status'];
+    const inactiveStatuses = new Set([
+        'inactive',
+        'disabled',
+        'resigned',
+        'terminated',
+        'separated',
+        'archived',
+        'suspended',
+        'deleted',
+        'deactivated',
+        '0',
+        'false',
+    ]);
+    for (const k of statusKeys) {
+        if (Object.prototype.hasOwnProperty.call(user, k) && user[k] != null) {
+            const v = user[k];
+            if (typeof v === 'number' && v === 0) return false;
+            const s = String(v).trim().toLowerCase();
+            if (inactiveStatuses.has(s)) return false;
+        }
+    }
+
+    return true;
+}
+
 export async function getDepartments(params = {}) {
     const qs = new URLSearchParams(params || {}).toString();
     const candidates = [
@@ -1053,7 +1099,8 @@ export async function findUserByRfidOrBarcode(value) {
             branchId: u.branchId ?? null,
             branchName: u.branchName ?? null,
             operationId: u.operationId ?? null,
-            isActive: u.isActive ?? true,
+            isActive: isUserActive(u),
+            status: u.user_status ?? u.userStatus ?? u.status ?? null,
             mobileNumber: u.user_contact ?? u.mobileNumber ?? null,
             image: u.user_image ?? u.image ?? null,
             externalId: u.external_id ?? u.externalId ?? null,
@@ -1068,7 +1115,7 @@ export async function findUserByRfidOrBarcode(value) {
             tin: u.user_tin ?? u.tin ?? null,
             birthday: u.user_bday ?? u.birthday ?? null,
             updatedAt: u.updateAt ?? u.update_at ?? u.updatedAt ?? null,
-            isDeleted: u.is_deleted ?? u.isDeleted ?? null,
+            isDeleted: u.is_deleted ?? u.is_delete ?? u.isDeleted ?? u.isDelete ?? null,
             roleId: u.role_id ?? u.roleId ?? null,
             token: u.token ?? null,
         };
