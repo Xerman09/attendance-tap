@@ -171,7 +171,7 @@
           </div>
         </div>
 
-        <div class="mt-4 flex items-center gap-2">
+        <div class="mt-4 flex flex-wrap items-center gap-2">
           <button
               type="button"
               class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 text-white px-4 py-2 shadow hover:bg-indigo-700 disabled:opacity-60"
@@ -202,6 +202,14 @@
             </span>
             <span v-if="!busy">Scan</span>
             <span v-else>Saving…</span>
+          </button>
+
+          <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-lg border border-emerald-600/30 bg-emerald-50 text-emerald-700 px-3.5 py-2 text-sm font-medium shadow-sm hover:bg-emerald-100 transition"
+              @click="testSuccessModal"
+          >
+            <span>Test Success Modal</span>
           </button>
         </div>
       </div>
@@ -345,6 +353,19 @@
     </div>
 
     <StatusToast :ok="toast.ok" :message="toast.msg" />
+
+    <SuccessModal
+      :show="successModal.show"
+      :trigger-key="successModal.triggerKey"
+      :tap-type="successModal.tapType"
+      :tap-method="successModal.tapMethod"
+      :tap-time="successModal.tapTime"
+      :tap-date="successModal.tapDate"
+      :employee-name="successModal.employeeName"
+      :department="successModal.department"
+      :photo-url="successModal.photoUrl"
+      @close="closeSuccessModal"
+    />
   </div>
 </template>
 
@@ -358,6 +379,7 @@ import {
   nextTick,
 } from 'vue';
 import StatusToast from '../components/StatusToast.vue';
+import SuccessModal from '../components/SuccessModal.vue';
 import {
   postLog,
   findUserByRfidOrBarcode,
@@ -395,6 +417,17 @@ const rfidInput = ref(null);
 const busy = ref(false);
 const lastLocalLogs = ref([]);
 const toast = ref({ ok: false, msg: '' });
+const successModal = ref({
+  show: false,
+  triggerKey: 0,
+  tapType: 'TIME_IN',
+  tapMethod: '',
+  tapTime: '',
+  tapDate: '',
+  employeeName: '',
+  department: '',
+  photoUrl: '',
+});
 const adminRows = ref([]);
 
 /** ---------------- Clock ---------------- */
@@ -641,6 +674,61 @@ function note(ok, msg) {
       () => (toast.value = { ok: false, msg: '' }),
       3000
   );
+}
+function openSuccessModal({ tapType, tapMethod, employeeName, department, photoUrl }) {
+  const tapNow = new Date();
+  const tapTime = tapNow.toLocaleTimeString('en-PH', {
+    timeZone: 'Asia/Manila',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+  const tapDate = tapNow.toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  successModal.value = {
+    show: true,
+    triggerKey: successModal.value.triggerKey + 1,
+    tapType: tapType || 'TIME_IN',
+    tapMethod: tapMethod || '',
+    tapTime,
+    tapDate,
+    employeeName: employeeName || '',
+    department: department || '',
+    photoUrl: photoUrl || '',
+  };
+}
+function closeSuccessModal() {
+  successModal.value.show = false;
+  try {
+    if (!DISABLE_RFID) {
+      nextTick(() => setTimeout(() => rfidInput?.value?.focus?.(), 0));
+    }
+  } catch {}
+}
+
+let dummyTapIndex = 0;
+function testSuccessModal() {
+  const tapType = ACTION_SEQUENCE[dummyTapIndex % ACTION_SEQUENCE.length];
+  dummyTapIndex++;
+  openSuccessModal({
+    tapType,
+    tapMethod: 'RFID',
+    employeeName:
+      fullName.value ||
+      (selectedUser.value && (selectedUser.value.fullName || selectedUser.value.name)) ||
+      'Juan Dela Cruz',
+    department:
+      departmentNameDisplay.value !== '—'
+        ? departmentNameDisplay.value
+        : 'Human Resources',
+    photoUrl: displayPhoto.value || '',
+  });
 }
 function pushLocal(entry) {
   lastLocalLogs.value.unshift(entry);
@@ -1419,10 +1507,6 @@ async function simulateFingerprint() {
       departmentId: autoDeptId,
       departmentName: autoDeptName,
     });
-    note(
-        true,
-        `Fingerprint ${titleCaseFromEnum(nextAction)} logged for #${targetUserId}`
-    );
     success = true;
     console.log('[Scanner] simulateFingerprint result ->', res);
     form.value.action = nextAction;
@@ -1439,6 +1523,13 @@ async function simulateFingerprint() {
       name: String(scanName),
       department: String(scanDept || ''),
     };
+    openSuccessModal({
+      tapType: nextAction,
+      tapMethod: 'Fingerprint',
+      employeeName: String(scanName),
+      department: String(scanDept || ''),
+      photoUrl: displayPhoto.value || '',
+    });
 
     startCooldownFor(targetUserId);
   } catch (e) {
@@ -1547,10 +1638,6 @@ async function commit({
       departmentId: resolvedDeptId,
       departmentName: resolvedDeptName,
     });
-    note(
-        true,
-        `${type} ${titleCaseFromEnum(nextAction)} logged for #${userId}`
-    );
     success = true;
     console.log('[Scanner] commit result ->', res);
     loadAdminLogs();
@@ -1567,6 +1654,13 @@ async function commit({
       name: String(scanName),
       department: String(scanDept || ''),
     };
+    openSuccessModal({
+      tapType: nextAction,
+      tapMethod: type === 'RFID' ? 'RFID' : titleCaseFromEnum(type),
+      employeeName: String(scanName),
+      department: String(scanDept || ''),
+      photoUrl: displayPhoto.value || '',
+    });
 
     startCooldownFor(userId);
   } catch (e) {
