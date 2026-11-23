@@ -211,6 +211,14 @@
           >
             <span>Test Success Modal</span>
           </button>
+
+          <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-lg border border-rose-600/30 bg-rose-50 text-rose-700 px-3.5 py-2 text-sm font-medium shadow-sm hover:bg-rose-100 transition"
+              @click="testErrorModal"
+          >
+            <span>Test Error Modal</span>
+          </button>
         </div>
       </div>
 
@@ -366,6 +374,15 @@
       :photo-url="successModal.photoUrl"
       @close="closeSuccessModal"
     />
+
+    <ErrorModal
+      :show="errorModal.show"
+      :trigger-key="errorModal.triggerKey"
+      :message="errorModal.message"
+      :tap-time="errorModal.tapTime"
+      :tap-date="errorModal.tapDate"
+      @close="closeErrorModal"
+    />
   </div>
 </template>
 
@@ -380,6 +397,7 @@ import {
 } from 'vue';
 import StatusToast from '../components/StatusToast.vue';
 import SuccessModal from '../components/SuccessModal.vue';
+import ErrorModal from '../components/ErrorModal.vue';
 import {
   postLog,
   findUserByRfidOrBarcode,
@@ -427,6 +445,13 @@ const successModal = ref({
   employeeName: '',
   department: '',
   photoUrl: '',
+});
+const errorModal = ref({
+  show: false,
+  triggerKey: 0,
+  message: '',
+  tapTime: '',
+  tapDate: '',
 });
 const adminRows = ref([]);
 
@@ -669,11 +694,48 @@ const manilaIsoWithOffset = () => {
 
 /** ---------------- UI helpers ---------------- */
 function note(ok, msg) {
+  if (!ok) {
+    openErrorModal(msg);
+    return;
+  }
   toast.value = { ok, msg };
   setTimeout(
       () => (toast.value = { ok: false, msg: '' }),
       3000
   );
+}
+function openErrorModal(message) {
+  const tapNow = new Date();
+  const tapTime = tapNow.toLocaleTimeString('en-PH', {
+    timeZone: 'Asia/Manila',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+  const tapDate = tapNow.toLocaleDateString('en-PH', {
+    timeZone: 'Asia/Manila',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  successModal.value.show = false;
+  errorModal.value = {
+    show: true,
+    triggerKey: errorModal.value.triggerKey + 1,
+    message: message || 'Unable to process tap. Please try again.',
+    tapTime,
+    tapDate,
+  };
+}
+function closeErrorModal() {
+  errorModal.value.show = false;
+  try {
+    if (!DISABLE_RFID) {
+      nextTick(() => setTimeout(() => rfidInput?.value?.focus?.(), 0));
+    }
+  } catch {}
 }
 function openSuccessModal({ tapType, tapMethod, employeeName, department, photoUrl }) {
   const tapNow = new Date();
@@ -691,6 +753,7 @@ function openSuccessModal({ tapType, tapMethod, employeeName, department, photoU
     month: 'long',
     day: 'numeric',
   });
+  errorModal.value.show = false;
   successModal.value = {
     show: true,
     triggerKey: successModal.value.triggerKey + 1,
@@ -729,6 +792,18 @@ function testSuccessModal() {
         : 'Human Resources',
     photoUrl: displayPhoto.value || '',
   });
+}
+
+const DUMMY_ERRORS = [
+  'User not found for given RFID.',
+  'You can only scan once. Please wait a minute before tapping again.',
+  'All required scans for today are already recorded. Please do not scan again.',
+];
+let dummyErrorIndex = 0;
+function testErrorModal() {
+  const msg = DUMMY_ERRORS[dummyErrorIndex % DUMMY_ERRORS.length];
+  dummyErrorIndex++;
+  openErrorModal(msg);
 }
 function pushLocal(entry) {
   lastLocalLogs.value.unshift(entry);
