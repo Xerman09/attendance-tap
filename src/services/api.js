@@ -617,11 +617,10 @@ export async function getLogs(params = {}) {
     }
 }
 
-// *** FIXED: do NOT filter by userId in Directus; filter in JS instead ***
 async function findExistingLog(userId, logDate) {
     const dateStr = String(logDate).slice(0, 10);
     try {
-        const res = await getLogs({ from: dateStr, to: dateStr });
+        const res = await getLogs({ userId, from: dateStr, to: dateStr });
         const arr = Array.isArray(res) ? res : res?.content || [];
         const targetUid = String(userId);
         const match = arr.find((r) => {
@@ -1482,17 +1481,6 @@ export async function postLog(payload) {
 
     const logDate = String(payload?.logDate || whenDate);
 
-    const confirmedUser = await getUserById(derivedUserId, {
-        noMock: true,
-    });
-    if (!confirmedUser) {
-        const err = new Error(
-            `User #${derivedUserId} not found on server. Please verify the ID or register the user.`
-        );
-        err.code = 'USER_NOT_FOUND';
-        throw err;
-    }
-
     let derivedDeptId =
         (payload?.departmentId != null
             ? Number(payload.departmentId)
@@ -1507,28 +1495,32 @@ export async function postLog(payload) {
             ? Number(payload.user.department.departmentId)
             : undefined);
 
+    // Run independent lookups in parallel to minimize tap latency
+    const [confirmedUser, existingForDay, initialSchedule] = await Promise.all([
+        getUserById(derivedUserId, { noMock: true }),
+        findExistingLog(derivedUserId, logDate).catch(() => null),
+        derivedDeptId != null
+            ? getScheduleByDepartment(derivedDeptId).catch(() => null)
+            : Promise.resolve(null),
+    ]);
+
+    if (!confirmedUser) {
+        const err = new Error(
+            `User #${derivedUserId} not found on server. Please verify the ID or register the user.`
+        );
+        err.code = 'USER_NOT_FOUND';
+        throw err;
+    }
+
+    let schedule = initialSchedule;
     if (derivedDeptId == null) {
         try {
             const r = await resolveDepartmentForUser(derivedUserId);
-            if (r?.departmentId != null)
+            if (r?.departmentId != null) {
                 derivedDeptId = Number(r.departmentId);
+                schedule = await getScheduleByDepartment(derivedDeptId).catch(() => null);
+            }
         } catch (_) {}
-    }
-
-    let existingForDay = null;
-    try {
-        existingForDay = await findExistingLog(derivedUserId, logDate);
-    } catch (_) {
-        existingForDay = null;
-    }
-
-    let schedule = null;
-    try {
-        if (derivedDeptId != null) {
-            schedule = await getScheduleByDepartment(derivedDeptId);
-        }
-    } catch (_) {
-        schedule = null;
     }
 
     const baseActionEnum = normalizeAction(

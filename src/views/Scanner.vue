@@ -132,7 +132,7 @@
                   v-model.trim="form.rfide"
                   @keyup.enter="onRfidSubmit"
                   placeholder="Tap card or enter RFID"
-                  :disabled="DISABLE_RFID || busy"
+                  :disabled="DISABLE_RFID || busy || scanning"
                   autocomplete="off"
               />
               <div
@@ -367,6 +367,29 @@
       :tap-date="errorModal.tapDate"
       @close="closeErrorModal"
     />
+
+    <!-- Centered Loading Overlay while processing tap -->
+    <Teleport to="body">
+      <div
+        v-if="scanning || busy"
+        class="fixed inset-0 z-[95] flex items-center justify-center bg-neutral-950/35 p-4 backdrop-blur-sm"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="flex w-full max-w-xs flex-col items-center rounded-3xl border border-white/60 bg-white/95 px-7 py-6 text-center shadow-2xl">
+          <div class="relative flex h-16 w-16 items-center justify-center">
+            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400/25" />
+            <div class="h-14 w-14 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-500 border-r-indigo-500" />
+          </div>
+          <div class="mt-4 text-base font-bold text-neutral-900">
+            {{ loadingText || 'Processing tap…' }}
+          </div>
+          <div class="mt-1 text-xs text-neutral-500">
+            Please wait a moment
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -418,6 +441,8 @@ const maskedRfid = computed(() =>
 
 const rfidInput = ref(null);
 const busy = ref(false);
+const scanning = ref(false);
+const loadingText = ref('Processing tap…');
 const lastLocalLogs = ref([]);
 const toast = ref({ ok: false, msg: '' });
 const successModal = ref({
@@ -606,9 +631,11 @@ watch(
 
 /** ---------------- RFID submit ---------------- */
 async function onRfidSubmit() {
-  if (DISABLE_RFID || busy.value) return;
+  if (DISABLE_RFID || busy.value || scanning.value) return;
   const v = String(form.value.rfide || '').trim();
   if (!v) return;
+  scanning.value = true;
+  loadingText.value = 'Verifying employee card…';
   try {
     const u = await findUserByRfidOrBarcode(v);
     if (u && (u.userId != null || u.id != null)) {
@@ -648,6 +675,7 @@ async function onRfidSubmit() {
       selectedUser.value = u;
       if (name) fullName.value = name;
 
+      loadingText.value = 'Recording attendance…';
       try {
         await commit({
           departmentId: form.value.departmentId,
@@ -665,6 +693,13 @@ async function onRfidSubmit() {
     console.error('[Scanner] onRfidSubmit error:', e);
     note(false, 'Failed to resolve RFID.');
     scheduleClearFields(2000);
+  } finally {
+    scanning.value = false;
+    try {
+      if (!DISABLE_RFID) {
+        nextTick(() => setTimeout(() => rfidInput?.value?.focus?.(), 0));
+      }
+    } catch {}
   }
 }
 
@@ -1494,6 +1529,7 @@ async function simulateFingerprint() {
 
   if (busy.value) return;
   busy.value = true;
+  loadingText.value = 'Recording attendance…';
 
   try {
     const ok = await verifyUserExists(targetUserId);
@@ -1633,6 +1669,7 @@ async function commit({
                       }) {
   if (busy.value) return;
   busy.value = true;
+  loadingText.value = 'Recording attendance…';
 
   let intendedUserId = Number(manualUserId) || null;
   let success = false;
