@@ -227,33 +227,50 @@ function playErrorSound() {
     }
 
     const now = ctx.currentTime;
+
+    // Low-pass filter keeps the buzzer punchy and attention-grabbing without harsh static
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1900, now);
+
     const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.2, now);
+    masterGain.gain.setValueAtTime(0.32, now);
+
+    filter.connect(masterGain);
     masterGain.connect(ctx.destination);
 
-    // Distinct two-step descending error tone (E4 -> C4 with subtle harmonic)
-    const notes = [
-      { freq: 329.63, start: 0.0, dur: 0.16, type: 'triangle', vol: 0.9 },  // E4
-      { freq: 246.94, start: 0.0, dur: 0.16, type: 'sawtooth', vol: 0.25 }, // B3 undertone
-      { freq: 261.63, start: 0.18, dur: 0.3, type: 'triangle', vol: 0.95 }, // C4
-      { freq: 196.0, start: 0.18, dur: 0.3, type: 'sawtooth', vol: 0.28 },  // G3 undertone
+    // Classic kiosk error/warning pattern: two sharp dissonant warning beeps + low descending denial buzz
+    const pulses = [
+      // Pulse 1: urgent warning beep (dissonant pair)
+      { freq: 520, endFreq: 520, start: 0.0, dur: 0.11, type: 'square', vol: 0.75 },
+      { freq: 370, endFreq: 370, start: 0.0, dur: 0.11, type: 'sawtooth', vol: 0.45 },
+      // Pulse 2: repeat warning beep to catch attention
+      { freq: 520, endFreq: 520, start: 0.14, dur: 0.11, type: 'square', vol: 0.8 },
+      { freq: 370, endFreq: 370, start: 0.14, dur: 0.11, type: 'sawtooth', vol: 0.48 },
+      // Pulse 3: authoritative low descending error buzz
+      { freq: 240, endFreq: 165, start: 0.29, dur: 0.34, type: 'sawtooth', vol: 0.9 },
+      { freq: 180, endFreq: 120, start: 0.29, dur: 0.34, type: 'square', vol: 0.55 },
     ];
 
-    for (const n of notes) {
+    for (const p of pulses) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = n.type;
-      osc.frequency.setValueAtTime(n.freq, now + n.start);
+      osc.type = p.type;
+      osc.frequency.setValueAtTime(p.freq, now + p.start);
+      if (p.endFreq !== p.freq) {
+        osc.frequency.exponentialRampToValueAtTime(p.endFreq, now + p.start + p.dur);
+      }
 
-      gain.gain.setValueAtTime(0.0001, now + n.start);
-      gain.gain.exponentialRampToValueAtTime(n.vol, now + n.start + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + n.dur);
+      gain.gain.setValueAtTime(0.0001, now + p.start);
+      gain.gain.linearRampToValueAtTime(p.vol, now + p.start + 0.008);
+      gain.gain.setValueAtTime(p.vol, now + p.start + Math.max(0.02, p.dur - 0.03));
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + p.start + p.dur);
 
       osc.connect(gain);
-      gain.connect(masterGain);
+      gain.connect(filter);
 
-      osc.start(now + n.start);
-      osc.stop(now + n.start + n.dur + 0.02);
+      osc.start(now + p.start);
+      osc.stop(now + p.start + p.dur + 0.02);
     }
   } catch (_) {
     // Ignore audio errors if blocked by browser policy
