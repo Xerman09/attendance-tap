@@ -203,22 +203,6 @@
             <span v-if="!busy">Scan</span>
             <span v-else>Saving…</span>
           </button>
-
-          <button
-              type="button"
-              class="inline-flex items-center gap-2 rounded-lg border border-emerald-600/30 bg-emerald-50 text-emerald-700 px-3.5 py-2 text-sm font-medium shadow-sm hover:bg-emerald-100 transition"
-              @click="testSuccessModal"
-          >
-            <span>Test Success Modal</span>
-          </button>
-
-          <button
-              type="button"
-              class="inline-flex items-center gap-2 rounded-lg border border-rose-600/30 bg-rose-50 text-rose-700 px-3.5 py-2 text-sm font-medium shadow-sm hover:bg-rose-100 transition"
-              @click="testErrorModal"
-          >
-            <span>Test Error Modal</span>
-          </button>
         </div>
       </div>
 
@@ -773,37 +757,6 @@ function closeSuccessModal() {
       nextTick(() => setTimeout(() => rfidInput?.value?.focus?.(), 0));
     }
   } catch {}
-}
-
-let dummyTapIndex = 0;
-function testSuccessModal() {
-  const tapType = ACTION_SEQUENCE[dummyTapIndex % ACTION_SEQUENCE.length];
-  dummyTapIndex++;
-  openSuccessModal({
-    tapType,
-    tapMethod: 'RFID',
-    employeeName:
-      fullName.value ||
-      (selectedUser.value && (selectedUser.value.fullName || selectedUser.value.name)) ||
-      'Juan Dela Cruz',
-    department:
-      departmentNameDisplay.value !== '—'
-        ? departmentNameDisplay.value
-        : 'Human Resources',
-    photoUrl: displayPhoto.value || '',
-  });
-}
-
-const DUMMY_ERRORS = [
-  'User not found for given RFID.',
-  'You can only scan once. Please wait a minute before tapping again.',
-  'All required scans for today are already recorded. Please do not scan again.',
-];
-let dummyErrorIndex = 0;
-function testErrorModal() {
-  const msg = DUMMY_ERRORS[dummyErrorIndex % DUMMY_ERRORS.length];
-  dummyErrorIndex++;
-  openErrorModal(msg);
 }
 function pushLocal(entry) {
   lastLocalLogs.value.unshift(entry);
