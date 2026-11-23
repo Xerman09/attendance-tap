@@ -170,7 +170,7 @@ const props = defineProps({
   message: { type: String, default: '' },
   tapTime: { type: String, default: '' },
   tapDate: { type: String, default: '' },
-  duration: { type: Number, default: 4000 },
+  duration: { type: Number, default: 2000 },
 });
 
 const emit = defineEmits(['close']);

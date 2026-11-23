@@ -202,7 +202,7 @@ const props = defineProps({
   employeeName: { type: String, default: '' },
   department: { type: String, default: '' },
   photoUrl: { type: String, default: '' },
-  duration: { type: Number, default: 4000 },
+  duration: { type: Number, default: 2000 },
 });
 
 const emit = defineEmits(['close']);
