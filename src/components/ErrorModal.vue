@@ -229,50 +229,64 @@ function playErrorSound() {
 
     const now = ctx.currentTime;
 
-    // Low-pass filter keeps the buzzer punchy and attention-grabbing without harsh static
+    // Warm 8-bit NES-style low-pass filter
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(1900, now);
+    filter.frequency.setValueAtTime(3200, now);
 
     const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.32, now);
+    masterGain.gain.setValueAtTime(0.24, now);
 
     filter.connect(masterGain);
     masterGain.connect(ctx.destination);
 
-    // Classic kiosk error/warning pattern: two sharp dissonant warning beeps + low descending denial buzz
-    const pulses = [
-      // Pulse 1: urgent warning beep (dissonant pair)
-      { freq: 520, endFreq: 520, start: 0.0, dur: 0.11, type: 'square', vol: 0.75 },
-      { freq: 370, endFreq: 370, start: 0.0, dur: 0.11, type: 'sawtooth', vol: 0.45 },
-      // Pulse 2: repeat warning beep to catch attention
-      { freq: 520, endFreq: 520, start: 0.14, dur: 0.11, type: 'square', vol: 0.8 },
-      { freq: 370, endFreq: 370, start: 0.14, dur: 0.11, type: 'sawtooth', vol: 0.48 },
-      // Pulse 3: authoritative low descending error buzz
-      { freq: 240, endFreq: 165, start: 0.29, dur: 0.34, type: 'sawtooth', vol: 0.9 },
-      { freq: 180, endFreq: 120, start: 0.29, dur: 0.34, type: 'square', vol: 0.55 },
+    // Classic 8-bit "Player Down / Defeated" chiptune melody (square lead + triangle bass)
+    const lead = [
+      { freq: 493.88, start: 0.0, dur: 0.11 },  // B4
+      { freq: 698.46, start: 0.12, dur: 0.11 }, // F5
+      { freq: 698.46, start: 0.34, dur: 0.13 }, // F5
+      { freq: 698.46, start: 0.49, dur: 0.14 }, // F5
+      { freq: 659.25, start: 0.65, dur: 0.14 }, // E5
+      { freq: 587.33, start: 0.81, dur: 0.14 }, // D5
+      { freq: 523.25, start: 0.97, dur: 0.12 }, // C5
+      { freq: 329.63, start: 1.11, dur: 0.11 }, // E4
+      { freq: 329.63, start: 1.24, dur: 0.1 },  // E4
+      { freq: 261.63, start: 1.36, dur: 0.28 }, // C4
     ];
 
-    for (const p of pulses) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = p.type;
-      osc.frequency.setValueAtTime(p.freq, now + p.start);
-      if (p.endFreq !== p.freq) {
-        osc.frequency.exponentialRampToValueAtTime(p.endFreq, now + p.start + p.dur);
+    const bass = [
+      { freq: 196.0, start: 0.0, dur: 0.11 },   // G3
+      { freq: 293.66, start: 0.12, dur: 0.11 }, // D4
+      { freq: 293.66, start: 0.34, dur: 0.13 }, // D4
+      { freq: 293.66, start: 0.49, dur: 0.14 }, // D4
+      { freq: 261.63, start: 0.65, dur: 0.14 }, // C4
+      { freq: 246.94, start: 0.81, dur: 0.14 }, // B3
+      { freq: 196.0, start: 0.97, dur: 0.12 },  // G3
+      { freq: 130.81, start: 1.36, dur: 0.28 }, // C3
+    ];
+
+    const scheduleVoice = (notes, type, vol) => {
+      for (const n of notes) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(n.freq, now + n.start);
+
+        gain.gain.setValueAtTime(0.0001, now + n.start);
+        gain.gain.linearRampToValueAtTime(vol, now + n.start + 0.008);
+        gain.gain.setValueAtTime(vol, now + n.start + Math.max(0.02, n.dur - 0.025));
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + n.dur);
+
+        osc.connect(gain);
+        gain.connect(filter);
+
+        osc.start(now + n.start);
+        osc.stop(now + n.start + n.dur + 0.02);
       }
+    };
 
-      gain.gain.setValueAtTime(0.0001, now + p.start);
-      gain.gain.linearRampToValueAtTime(p.vol, now + p.start + 0.008);
-      gain.gain.setValueAtTime(p.vol, now + p.start + Math.max(0.02, p.dur - 0.03));
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + p.start + p.dur);
-
-      osc.connect(gain);
-      gain.connect(filter);
-
-      osc.start(now + p.start);
-      osc.stop(now + p.start + p.dur + 0.02);
-    }
+    scheduleVoice(lead, 'square', 0.65);
+    scheduleVoice(bass, 'triangle', 0.85);
   } catch (_) {
     // Ignore audio errors if blocked by browser policy
   }
