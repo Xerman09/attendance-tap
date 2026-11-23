@@ -272,7 +272,7 @@
                 </thead>
                 <tbody>
                 <tr
-                    v-for="s in schedules"
+                    v-for="s in visibleSchedules"
                     :key="s.scheduleId ?? s.departmentId"
                     class="border-b border-black/5"
                 >
@@ -326,7 +326,7 @@
               </table>
             </div>
             <div
-                v-if="schedules.length === 0"
+                v-if="visibleSchedules.length === 0"
                 class="text-sm text-neutral-600 p-4"
             >
               No schedules available.
@@ -862,6 +862,18 @@ const schedules = ref([]);
 const schedulesLoading = ref(true);
 const schedulesError = ref('');
 const departments = ref([]);
+
+const visibleSchedules = computed(() => {
+  const list = schedules.value || [];
+  if (!departments.value.length) return list;
+  return list.filter((s) => {
+    if (s?.departmentId == null) return false;
+    return Object.prototype.hasOwnProperty.call(
+      deptMap.value,
+      String(s.departmentId)
+    );
+  });
+});
 
 const deptMap = computed(() => {
   const map = {};

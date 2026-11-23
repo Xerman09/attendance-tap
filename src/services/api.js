@@ -785,6 +785,28 @@ async function updateLogByComposite(userId, logDate, patch) {
 }
 
 // ----------------- USERS / DEPARTMENTS -----------------
+export function isRecordDeleted(record) {
+    if (!record || typeof record !== 'object') return false;
+    const flagKeys = ['is_delete', 'is_deleted', 'isDelete', 'isDeleted'];
+    for (const k of flagKeys) {
+        if (Object.prototype.hasOwnProperty.call(record, k) && record[k] != null) {
+            const v = record[k];
+            if (typeof v === 'boolean') return v;
+            if (typeof v === 'number') return v === 1;
+            const s = String(v).trim().toLowerCase();
+            if (s === '1' || s === 'true' || s === 'yes') return true;
+            if (s === '0' || s === 'false' || s === 'no' || s === '') return false;
+        }
+    }
+    const dateKeys = ['deleted_at', 'deletedAt'];
+    for (const k of dateKeys) {
+        if (Object.prototype.hasOwnProperty.call(record, k) && record[k] != null) {
+            if (String(record[k]).trim() !== '') return true;
+        }
+    }
+    return false;
+}
+
 export async function getDepartments(params = {}) {
     const qs = new URLSearchParams(params || {}).toString();
     const candidates = [
@@ -795,14 +817,15 @@ export async function getDepartments(params = {}) {
         console.log('[API] GET', url);
         try {
             const res = await http(url);
-            if (Array.isArray(res)) return res;
-            if (Array.isArray(res?.data)) return res.data;
-            if (Array.isArray(res?.data?.data)) return res.data.data;
-            if (Array.isArray(res?.content)) return res.content;
-            if (Array.isArray(res?.items)) return res.items;
-            if (Array.isArray(res?.records)) return res.records;
-            if (res && typeof res === 'object') return [res];
-            return [];
+            let list = [];
+            if (Array.isArray(res)) list = res;
+            else if (Array.isArray(res?.data)) list = res.data;
+            else if (Array.isArray(res?.data?.data)) list = res.data.data;
+            else if (Array.isArray(res?.content)) list = res.content;
+            else if (Array.isArray(res?.items)) list = res.items;
+            else if (Array.isArray(res?.records)) list = res.records;
+            else if (res && typeof res === 'object') list = [res];
+            return list.filter((d) => !isRecordDeleted(d));
         } catch (e) {
             lastErr = e;
             console.warn(
@@ -1397,7 +1420,9 @@ export async function getDepartmentSchedules() {
                 : Array.isArray(res?.data)
                     ? res.data
                     : res?.content || [];
-            return list.map(normalizeSchedule);
+            return list
+                .filter((raw) => !isRecordDeleted(raw))
+                .map(normalizeSchedule);
         } catch (e) {
             lastErr = e;
             console.warn(
