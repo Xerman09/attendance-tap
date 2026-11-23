@@ -309,39 +309,59 @@ function playCelebrationMusic() {
     }
 
     const now = ctx.currentTime;
+
+    // Warm 8-bit NES-style low-pass filter
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(3600, now);
+
     const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.22, now);
+    masterGain.gain.setValueAtTime(0.24, now);
+
+    filter.connect(masterGain);
     masterGain.connect(ctx.destination);
 
-    // Upbeat celebratory melody (C major 9 arpeggio + joyful final chord)
-    const notes = [
-      { freq: 523.25, start: 0.0, dur: 0.18, type: 'triangle', vol: 0.9 },  // C5
-      { freq: 659.25, start: 0.1, dur: 0.18, type: 'triangle', vol: 0.9 },  // E5
-      { freq: 783.99, start: 0.2, dur: 0.2, type: 'triangle', vol: 0.95 },  // G5
-      { freq: 1046.5, start: 0.3, dur: 0.55, type: 'triangle', vol: 1.0 },  // C6
-      // Warm harmonic chord shimmer on the final beat
-      { freq: 523.25, start: 0.3, dur: 0.55, type: 'sine', vol: 0.45 },     // C5
-      { freq: 659.25, start: 0.3, dur: 0.55, type: 'sine', vol: 0.45 },     // E5
-      { freq: 783.99, start: 0.3, dur: 0.55, type: 'sine', vol: 0.45 },     // G5
-      { freq: 1318.51, start: 0.42, dur: 0.45, type: 'sine', vol: 0.35 },   // E6 sparkle
+    // Classic 8-bit Super Mario 1-UP success jingle: E5 -> G5 -> E6 -> C6 -> D6 -> G6
+    const lead = [
+      { freq: 659.25, start: 0.0, dur: 0.11 },  // E5
+      { freq: 783.99, start: 0.11, dur: 0.11 }, // G5
+      { freq: 1318.51, start: 0.22, dur: 0.11 }, // E6
+      { freq: 1046.5, start: 0.33, dur: 0.11 }, // C6
+      { freq: 1174.66, start: 0.44, dur: 0.11 }, // D6
+      { freq: 1567.98, start: 0.55, dur: 0.28 }, // G6
     ];
 
-    for (const n of notes) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = n.type;
-      osc.frequency.setValueAtTime(n.freq, now + n.start);
+    const harmony = [
+      { freq: 329.63, start: 0.0, dur: 0.11 },  // E4
+      { freq: 392.0, start: 0.11, dur: 0.11 },  // G4
+      { freq: 659.25, start: 0.22, dur: 0.11 }, // E5
+      { freq: 523.25, start: 0.33, dur: 0.11 }, // C5
+      { freq: 587.33, start: 0.44, dur: 0.11 }, // D5
+      { freq: 783.99, start: 0.55, dur: 0.28 }, // G5
+    ];
 
-      gain.gain.setValueAtTime(0.0001, now + n.start);
-      gain.gain.exponentialRampToValueAtTime(n.vol, now + n.start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + n.dur);
+    const scheduleVoice = (notes, type, vol) => {
+      for (const n of notes) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(n.freq, now + n.start);
 
-      osc.connect(gain);
-      gain.connect(masterGain);
+        gain.gain.setValueAtTime(0.0001, now + n.start);
+        gain.gain.linearRampToValueAtTime(vol, now + n.start + 0.008);
+        gain.gain.setValueAtTime(vol, now + n.start + Math.max(0.02, n.dur - 0.02));
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + n.start + n.dur);
 
-      osc.start(now + n.start);
-      osc.stop(now + n.start + n.dur + 0.02);
-    }
+        osc.connect(gain);
+        gain.connect(filter);
+
+        osc.start(now + n.start);
+        osc.stop(now + n.start + n.dur + 0.02);
+      }
+    };
+
+    scheduleVoice(lead, 'square', 0.65);
+    scheduleVoice(harmony, 'triangle', 0.6);
   } catch (_) {
     // Ignore audio errors if blocked by browser policy
   }
