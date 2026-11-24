@@ -131,8 +131,11 @@
                   type="text"
                   v-model.trim="form.rfide"
                   @keyup.enter="onRfidSubmit"
+                  @blur="onRfidBlur"
                   placeholder="Tap card or enter RFID"
-                  :disabled="DISABLE_RFID || busy || scanning"
+                  :disabled="DISABLE_RFID"
+                  :readonly="busy || scanning"
+                  autofocus
                   autocomplete="off"
               />
               <div
@@ -475,16 +478,57 @@ onBeforeUnmount(() => {
   if (t) clearInterval(t);
 });
 
-// Auto-focus RFID input
-onMounted(() => {
+// Auto-focus RFID input and keep it ready for kiosk card taps
+function focusRfidInput() {
   if (DISABLE_RFID) return;
   nextTick(() => {
     setTimeout(() => {
       try {
-        rfidInput?.value?.focus();
+        rfidInput?.value?.focus?.();
       } catch {}
     }, 0);
   });
+}
+
+function onRfidBlur() {
+  if (DISABLE_RFID) return;
+  setTimeout(() => {
+    const active = document.activeElement;
+    const tag = active?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    try {
+      rfidInput?.value?.focus?.();
+    } catch {}
+  }, 50);
+}
+
+function onWindowKeydownForRfid(e) {
+  if (DISABLE_RFID || busy.value || scanning.value) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const active = document.activeElement;
+  if (active === rfidInput.value) return;
+  const tag = active?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key && e.key.length === 1) {
+    try {
+      rfidInput?.value?.focus?.();
+    } catch {}
+  }
+}
+
+function onWindowFocusForRfid() {
+  focusRfidInput();
+}
+
+onMounted(() => {
+  focusRfidInput();
+  window.addEventListener('keydown', onWindowKeydownForRfid);
+  window.addEventListener('focus', onWindowFocusForRfid);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onWindowKeydownForRfid);
+  window.removeEventListener('focus', onWindowFocusForRfid);
 });
 
 /** ---------------- PH time strings ---------------- */
